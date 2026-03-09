@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,7 +42,7 @@ export class CommandsService {
         streamerId: session.streamerId,
         operatorId,
         action: dto.action,
-        payload: dto.payload,
+        payload: dto.payload as Prisma.InputJsonValue,
         status: 'QUEUED',
       },
     });
