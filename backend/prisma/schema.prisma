@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  STREAMER
+  OPERATOR
+}
+
+enum RemoteSessionStatus {
+  REQUESTED
+  ACTIVE
+  REJECTED
+  CLOSED
+  EMERGENCY_STOPPED
+}
+
+enum CommandStatus {
+  QUEUED
+  EXECUTED
+  FAILED
+}
+
+enum AgentStatus {
+  ONLINE
+  OFFLINE
+}
+
+model User {
+  id               String                @id @default(uuid())
+  email            String                @unique
+  displayName      String
+  passwordHash     String
+  role             Role
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  streamerProfile  StreamerProfile?
+  operatorPerms    OperatorPermission[]  @relation("OperatorPermissions")
+  streamerPerms    OperatorPermission[]  @relation("StreamerPermissions")
+  operatorSessions RemoteSession[]       @relation("OperatorSessions")
+  streamerSessions RemoteSession[]       @relation("StreamerSessions")
+  commandLogs      CommandLog[]          @relation("OperatorCommandLogs")
+  refreshTokens    RefreshToken[]
+}
+
+model StreamerProfile {
+  id           String            @id @default(uuid())
+  userId       String            @unique
+  timezone     String?
+  emergencyPin String?
+  createdAt    DateTime          @default(now())
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connections  AgentConnection[]
+  snapshots    StreamStateSnapshot[]
+}
+
+model OperatorPermission {
+  id         String   @id @default(uuid())
+  streamerId String
+  operatorId String
+  actions    String[]
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  streamer   User     @relation("StreamerPermissions", fields: [streamerId], references: [id], onDelete: Cascade)
+  operator   User     @relation("OperatorPermissions", fields: [operatorId], references: [id], onDelete: Cascade)
+
+  @@unique([streamerId, operatorId])
+}
+
+model RemoteSession {
+  id           String              @id @default(uuid())
+  streamerId   String
+  operatorId   String
+  status       RemoteSessionStatus
+  reason       String?
+  requestedAt  DateTime            @default(now())
+  approvedAt   DateTime?
+  startedAt    DateTime?
+  endedAt      DateTime?
+  streamer     User                @relation("StreamerSessions", fields: [streamerId], references: [id], onDelete: Cascade)
+  operator     User                @relation("OperatorSessions", fields: [operatorId], references: [id], onDelete: Cascade)
+  commandLogs  CommandLog[]
+  auditEvents  AuditEvent[]
+}
+
+model CommandLog {
+  id              String        @id @default(uuid())
+  remoteSessionId String
+  streamerId      String
+  operatorId      String
+  action          String
+  payload         Json
+  status          CommandStatus
+  errorMessage    String?
+  createdAt       DateTime      @default(now())
+  executedAt      DateTime?
+  remoteSession   RemoteSession @relation(fields: [remoteSessionId], references: [id], onDelete: Cascade)
+  operator        User          @relation("OperatorCommandLogs", fields: [operatorId], references: [id], onDelete: Cascade)
+}
+
+model AuditEvent {
+  id              String        @id @default(uuid())
+  remoteSessionId String?
+  actorUserId     String?
+  type            String
+  metadata        Json?
+  createdAt       DateTime      @default(now())
+  remoteSession   RemoteSession? @relation(fields: [remoteSessionId], references: [id], onDelete: SetNull)
+}
+
+model StreamStateSnapshot {
+  id          String   @id @default(uuid())
+  streamerId  String
+  source      String
+  snapshot    Json
+  capturedAt  DateTime @default(now())
+  streamer    StreamerProfile @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+}
+
+model AgentConnection {
+  id            String      @id @default(uuid())
+  streamerId    String
+  agentVersion  String
+  status        AgentStatus
+  connectedAt   DateTime    @default(now())
+  disconnectedAt DateTime?
+  heartbeatAt   DateTime
+  streamer      StreamerProfile @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
